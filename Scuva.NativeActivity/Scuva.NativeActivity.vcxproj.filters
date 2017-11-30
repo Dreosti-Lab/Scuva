@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="src\android_native_app_glue.c">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\main.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\display.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="src\window.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\android_native_app_glue.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\config.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\pch.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\display.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\window.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Headers">
+      <UniqueIdentifier>{e022b16d-8be3-4bbd-af3e-e175a415bcf5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{a544b6f3-ea7a-4590-a244-8b6c85151ecd}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
