@@ -1,6 +1,5 @@
 // Scuva Display Class Source (OpenGL ES version)
 
-
 #include "window.h"
 #include "display.h"
 

@@ -154,7 +154,6 @@
     <Content Include="res\mipmap-mdpi\ic_launcher.png" />
     <Content Include="res\mipmap-xhdpi\ic_launcher.png" />
     <Content Include="res\mipmap-xxhdpi\ic_launcher.png" />
-    <Content Include="res\mipmap-xxxhdpi\ic_launcher.png" />
     <Content Include="res\values\strings.xml">
       <SubType>Designer</SubType>
     </Content>

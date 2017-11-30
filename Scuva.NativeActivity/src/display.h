@@ -20,7 +20,7 @@
 
 // Include local class lbraries
 #include "config.h"
-//#include "vkWindow\vkWindow.h"
+#include "window.h"
 
 // Lazy Constants
 const std::string SOURCE_PATH_ = "../../../../../../src/";

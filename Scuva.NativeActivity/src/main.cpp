@@ -11,6 +11,11 @@
 #include <chrono>
 #include <ctime>
 
+// Include android libraries
+#include "media/NdkMediaCodec.h"
+#include "media/NdkMediaExtractor.h"
+
+
 /*
 * Our saved state data.
 */
@@ -259,7 +264,9 @@ static void engine_handle_cmd(struct android_app* app, int32_t cmd) {
 * android_native_app_glue.  It runs in its own thread, with its own
 * event loop for receiving input events and doing other things.
 */
-void android_main(struct android_app* state) {
+void android_main(struct android_app* state) 
+{
+	LOGI("Starting Android main...");
 	struct engine engine;
 
 	memset(&engine, 0, sizeof(engine));
@@ -267,6 +274,36 @@ void android_main(struct android_app* state) {
 	state->onAppCmd = engine_handle_cmd;
 	state->onInputEvent = engine_handle_input;
 	engine.app = state;
+
+	// Prepare to decode a video file!!
+	AMediaExtractor *ex = AMediaExtractor_new();
+	AMediaCodec *codec = NULL;
+	LOGI("Loading video file...");
+
+	std::string path = BASE_PATH + std::string("\\test.mp4");
+	LOGI("%s", path.c_str());
+// Does this ake sense?
+	media_status_t err = AMediaExtractor_setDataSource(ex, path.c_str());
+	LOGI("Media Extractor: %d", err);
+
+	const char *mime;
+	AMediaFormat *format = AMediaExtractor_getTrackFormat(ex, 0);
+	const char *s = AMediaFormat_toString(format);
+	LOGD("track %d format: %s", 0, s);
+
+/*
+	codec = AMediaCodec_createDecoderByType(mime);
+	AMediaCodec_configure(codec, format, d->window, NULL, 0);
+	d->ex = ex;
+	d->codec = codec;
+	d->renderstart = -1;
+	d->sawInputEOS = false;
+	d->sawOutputEOS = false;
+	d->isPlaying = false;
+	d->renderonce = true;
+	AMediaCodec_start(codec);
+
+	*/
 
 	// Prepare to monitor accelerometer
 	engine.sensorManager = ASensorManager_getInstance();
