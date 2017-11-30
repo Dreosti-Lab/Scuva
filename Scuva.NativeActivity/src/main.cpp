@@ -3,7 +3,8 @@
 // Include config defintions header
 #include "config.h"
 
-//#include "vkLog\vkLog.h"
+// Include local headers
+#include "log.h"
 //#include "VtoK.h"
 
 // Include standard libraries
@@ -31,6 +32,9 @@ struct saved_state {
 struct engine {
 	struct android_app* app;
 
+	AMediaExtractor* ex;
+	AMediaCodec *codec;
+
 	ASensorManager* sensorManager;
 	const ASensor* accelerometerSensor;
 	ASensorEventQueue* sensorEventQueue;
@@ -51,7 +55,29 @@ struct engine {
 /**
 * Initialize an EGL context for the current display.
 */
-static int engine_init_display(struct engine* engine) {
+static int engine_init_display(struct engine* engine) 
+{
+
+	// Initialize Media Decoder
+
+	// Prepare to decode a video file!!
+	AMediaCodec *codec = NULL;
+	LOGI("Loading video file...");
+	std::string path = Log::Path() + std::string("/test.mp4");
+
+	// Find media file format
+	AMediaFormat *media_format = AMediaExtractor_getTrackFormat(engine->app->media_extract, 0);
+	const char *s = AMediaFormat_toString(media_format);
+	LOGD("track %d format: %s", 0, s);
+	const char *mime;
+	AMediaFormat_getString(media_format, AMEDIAFORMAT_KEY_MIME, &mime);
+	LOGD("Codec: %s", mime);
+	codec = AMediaCodec_createDecoderByType(mime);
+	AMediaCodec_configure(codec, media_format, engine->app->window, NULL, 0);
+	engine->codec = codec;
+	engine->ex = engine->app->media_extract;
+
+
 	// initialize OpenGL ES and EGL
 
 	/*
@@ -139,6 +165,11 @@ static int engine_init_display(struct engine* engine) {
 	device.Initialize(&window, SPACE_PATH_);
 	*/
 
+
+	// Start Media Codec
+	AMediaCodec_start(engine->codec);
+
+
 	return 0;
 }
 
@@ -163,6 +194,45 @@ static void engine_draw_frame(struct engine* engine) {
 	// VtoK Update and Draw
 	//device.Update(0);
 
+	// Get most recent CODEC results
+
+	// Set a new input frame
+	int bufidx = AMediaCodec_dequeueInputBuffer(engine->codec, 200000);
+	LOGI("input buffer %d", bufidx);
+	size_t bufsize;
+	auto buf = AMediaCodec_getInputBuffer(engine->codec, bufidx, &bufsize);
+	auto sampleSize = AMediaExtractor_readSampleData(engine->ex, buf, bufsize);
+	auto presentationTimeUs = AMediaExtractor_getSampleTime(engine->ex);
+
+	AMediaCodec_queueInputBuffer(engine->codec, bufidx, 0, sampleSize, presentationTimeUs, 0);
+	bool ret = AMediaExtractor_advance(engine->ex);
+	LOGI("Sample Size %u", buf);
+
+	AMediaCodecBufferInfo info;
+	bufidx = AMediaCodec_dequeueOutputBuffer(engine->codec, &info, 200000);
+	if (bufidx >= 0)
+	{
+		LOGI("output buffer %d", bufidx);
+		uint8_t *buffer = AMediaCodec_getOutputBuffer(engine->codec, bufidx, &bufsize);
+		LOGD("Bytes: %u", buffer[0]);
+		AMediaCodec_releaseOutputBuffer(engine->codec, bufidx, false);
+	}
+	else if (bufidx == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
+		LOGD("output buffers changed");
+	}
+	else if (bufidx == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
+		auto format = AMediaCodec_getOutputFormat(engine->codec);
+		LOGD("format changed to: %s", AMediaFormat_toString(format));
+		AMediaFormat_delete(format);
+	}
+	else if (bufidx == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
+		LOGD("no output buffer right now");
+	}
+	else {
+		LOGD("unexpected info code: %zd", bufidx);
+	}
+
+
 	// Swap buffers
 	eglSwapBuffers(engine->display, engine->surface);
 
@@ -171,7 +241,7 @@ static void engine_draw_frame(struct engine* engine) {
 
 	// Report performance
 	long duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-	LOGD("Elapsed time: %d us", duration);
+//	LOGD("Elapsed time: %d us", duration);
 
 }
 
@@ -267,43 +337,19 @@ static void engine_handle_cmd(struct android_app* app, int32_t cmd) {
 void android_main(struct android_app* state) 
 {
 	LOGI("Starting Android main...");
-	struct engine engine;
 
+	// Get external storage path (using JNI)
+	std::string base_path = std::string(state->activity->externalDataPath);
+	
+	// Start Scuva Log
+	Log::Initialize(base_path);
+
+	struct engine engine;
 	memset(&engine, 0, sizeof(engine));
 	state->userData = &engine;
 	state->onAppCmd = engine_handle_cmd;
 	state->onInputEvent = engine_handle_input;
 	engine.app = state;
-
-	// Prepare to decode a video file!!
-	AMediaExtractor *ex = AMediaExtractor_new();
-	AMediaCodec *codec = NULL;
-	LOGI("Loading video file...");
-
-	std::string path = BASE_PATH + std::string("\\test.mp4");
-	LOGI("%s", path.c_str());
-// Does this ake sense?
-	media_status_t err = AMediaExtractor_setDataSource(ex, path.c_str());
-	LOGI("Media Extractor: %d", err);
-
-	const char *mime;
-	AMediaFormat *format = AMediaExtractor_getTrackFormat(ex, 0);
-	const char *s = AMediaFormat_toString(format);
-	LOGD("track %d format: %s", 0, s);
-
-/*
-	codec = AMediaCodec_createDecoderByType(mime);
-	AMediaCodec_configure(codec, format, d->window, NULL, 0);
-	d->ex = ex;
-	d->codec = codec;
-	d->renderstart = -1;
-	d->sawInputEOS = false;
-	d->sawOutputEOS = false;
-	d->isPlaying = false;
-	d->renderonce = true;
-	AMediaCodec_start(codec);
-
-	*/
 
 	// Prepare to monitor accelerometer
 	engine.sensorManager = ASensorManager_getInstance();

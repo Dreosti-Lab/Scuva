@@ -13,6 +13,9 @@
     <ClCompile Include="src\window.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="src\log.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\android_native_app_glue.h">
@@ -28,6 +31,9 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="src\window.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\log.h">
       <Filter>Headers</Filter>
     </ClInclude>
   </ItemGroup>

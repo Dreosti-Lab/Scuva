@@ -26,6 +26,9 @@
 #include <android/looper.h>
 #include <android/native_activity.h>
 
+#include "media/NdkMediaExtractor.h"
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -152,6 +155,9 @@ struct android_app {
     // Current content rectangle of the window; this is the area where the
     // window's content should be placed to be seen by the user.
     ARect contentRect;
+
+	// (CUSTOM)
+	AMediaExtractor *media_extract;
 
     // Current state of the app's activity.  May be either APP_CMD_START,
     // APP_CMD_RESUME, APP_CMD_PAUSE, or APP_CMD_STOP; see below.

@@ -15,8 +15,8 @@
  *
  */
 
-#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, "threaded_app", __VA_ARGS__))
-#define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR, "threaded_app", __VA_ARGS__))
+#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, "Scuva", __VA_ARGS__))
+#define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR, "Scuva", __VA_ARGS__))
 
 /* For debug builds, always enable the debug traces in this library */
 #ifndef NDEBUG
@@ -259,6 +259,17 @@ static struct android_app* android_app_create(ANativeActivity* activity,
         pthread_cond_wait(&android_app->cond, &android_app->mutex);
     }
     pthread_mutex_unlock(&android_app->mutex);
+
+	// Store Media Extractor for this App
+	android_app->media_extract = AMediaExtractor_new();
+	const char* base_path = activity->externalDataPath;
+	char movie_path[256];
+	strcat(movie_path, base_path);
+	strcat(movie_path, "/test.mp4");
+	LOGI("Movie Path: %s", movie_path);
+	media_status_t err = AMEDIA_ERROR_UNKNOWN;
+	err = AMediaExtractor_setDataSource(android_app->media_extract, movie_path);
+	LOGI("Media Extractor: %d", err);
 
     return android_app;
 }

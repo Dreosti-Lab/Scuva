@@ -13,8 +13,8 @@
 
 // Declare Constants
 // -----------------
-const std::string BASE_PATH = "/mnt/sdcard/Scuva";
-#define LOG_PATH "/mnt/sdcard/Scuva/_scuva_log.txt"
+const std::string BASE_PATH = "/mnt/sdcard/Scuva/files";
+#define LOG_PATH "/_scuva_log.txt"
 
 // Define Server/Client Addresses
 #define SERVER_ADDRESS "192.168.0.3"			// Home WLAN

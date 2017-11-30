@@ -36,6 +36,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\android_native_app_glue.c" />
+    <ClCompile Include="src\log.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\display.cpp" />
     <ClCompile Include="src\window.cpp" />
@@ -44,6 +45,7 @@
     <ClInclude Include="src\display.h" />
     <ClInclude Include="src\android_native_app_glue.h" />
     <ClInclude Include="src\config.h" />
+    <ClInclude Include="src\log.h" />
     <ClInclude Include="src\pch.h" />
     <ClInclude Include="src\window.h" />
   </ItemGroup>
