@@ -262,10 +262,11 @@ static struct android_app* android_app_create(ANativeActivity* activity,
 
 	// Store Media Extractor for this App
 	android_app->media_extract = AMediaExtractor_new();
-	const char* base_path = activity->externalDataPath;
+	//const char* base_path = activity->externalDataPath;
+	const char* base_path = MOVIE_PATH.c_str();
 	char movie_path[256];
-	strcat(movie_path, base_path);
-	strcat(movie_path, "/test.mp4");
+	strcpy(movie_path, base_path);
+	strcat(movie_path, "/0.mp4");
 	LOGI("Movie Path: %s", movie_path);
 	media_status_t err = AMEDIA_ERROR_UNKNOWN;
 	err = AMediaExtractor_setDataSource(android_app->media_extract, movie_path);

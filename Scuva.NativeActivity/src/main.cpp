@@ -26,14 +26,25 @@ struct saved_state {
 	int32_t y;
 };
 
-/**
-* Shared state for our app.
-*/
-struct engine {
-	struct android_app* app;
-
+/*
+ * Shared state for our app.
+ */
+struct decoder 
+{
 	AMediaExtractor* ex;
 	AMediaCodec *codec;
+	int64_t render_start;
+	bool sawInputEOS;
+	bool sawOutputEOS;
+	bool isPlaying;
+	bool render_once;
+	int64_t renderstart;
+};
+
+struct engine
+{
+	struct android_app* app;
+	decoder decoder;
 
 	ASensorManager* sensorManager;
 	const ASensor* accelerometerSensor;
@@ -48,37 +59,42 @@ struct engine {
 	struct saved_state state;
 };
 
+
+
 // Graphics
 //vkWindow window;
 //VtoK device;
 
-/**
-* Initialize an EGL context for the current display.
-*/
+/*
+ * Initialize an EGL context for the current display.
+ */
 static int engine_init_display(struct engine* engine) 
 {
-
-	// Initialize Media Decoder
-
-	// Prepare to decode a video file!!
-	AMediaCodec *codec = NULL;
+	// Prepare to decode a video file
 	LOGI("Loading video file...");
 	std::string path = Log::Path() + std::string("/test.mp4");
 
-	// Find media file format
+	// Determine media file format
 	AMediaFormat *media_format = AMediaExtractor_getTrackFormat(engine->app->media_extract, 0);
 	const char *s = AMediaFormat_toString(media_format);
-	LOGD("track %d format: %s", 0, s);
+	LOGD("Track %d, Format: %s", 0, s);
 	const char *mime;
 	AMediaFormat_getString(media_format, AMEDIAFORMAT_KEY_MIME, &mime);
 	LOGD("Codec: %s", mime);
-	codec = AMediaCodec_createDecoderByType(mime);
-	AMediaCodec_configure(codec, media_format, engine->app->window, NULL, 0);
-	engine->codec = codec;
-	engine->ex = engine->app->media_extract;
+	AMediaExtractor_selectTrack(engine->app->media_extract, 0);
+	engine->decoder.codec = AMediaCodec_createDecoderByType(mime);
+	AMediaCodec_configure(engine->decoder.codec, media_format, engine->app->window, NULL, 0);
+	engine->decoder.ex = engine->app->media_extract;
+	engine->decoder.renderstart = -1;
+	engine->decoder.sawInputEOS = false;
+	engine->decoder.sawOutputEOS = false;
+	engine->decoder.isPlaying = false;
+	engine->decoder.render_once = true;
 
+	// Start Media Codec
+	AMediaCodec_start(engine->decoder.codec);
 
-	// initialize OpenGL ES and EGL
+	// Initialize OpenGL ES and EGL
 
 	/*
 	* Here specify the attributes of the desired configuration.
@@ -110,7 +126,6 @@ static int engine_init_display(struct engine* engine)
 	* the first EGLConfig that matches our criteria */
 	eglChooseConfig(display, attribs, &config, 1, &numConfigs);
 	
-
 	/* EGL_NATIVE_VISUAL_ID is an attribute of the EGLConfig that is
 	* guaranteed to be accepted by ANativeWindow_setBuffersGeometry().
 	* As soon as we picked a EGLConfig, we can safely reconfigure the
@@ -121,19 +136,17 @@ static int engine_init_display(struct engine* engine)
 
 	surface = eglCreateWindowSurface(display, config, engine->app->window, NULL);
 
-
 	LOGD("Creating Context...");
+
 	// EGL_CONTEXT_CLIENT_VERSION = 0x3098;
 	const int attrib_list[] = { 0x3098, (int)2, EGL_NONE};
-
 	context = eglCreateContext(display, config, EGL_NO_CONTEXT, attrib_list);
-	//context = eglCreateContext(display, config, NULL, NULL);
-
 	if (eglMakeCurrent(display, surface, surface, context) == EGL_FALSE) {
 		LOGW("Unable to eglMakeCurrent");
 		return -1;
 	}
 	LOGD("Done");
+
 	// Report OpenGL version
 	LOGD("OpenGL version is (%s)\n", glGetString(GL_VERSION));
 
@@ -164,20 +177,24 @@ static int engine_init_display(struct engine* engine)
 	vkLog::Initialize();
 	device.Initialize(&window, SPACE_PATH_);
 	*/
-
-
-	// Start Media Codec
-	AMediaCodec_start(engine->codec);
-
-
 	return 0;
 }
 
-/**
-* Just the current frame in the display.
-*/
+// A simple time measurmeent function
+int64_t systemnanotime() 
+{
+	timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	return now.tv_sec * 1000000000LL + now.tv_nsec;
+}
 
-static void engine_draw_frame(struct engine* engine) {
+
+/*
+ * Just the current frame in the display.
+ */
+
+static void engine_draw_frame(struct engine* engine) 
+{
 	if (engine->display == NULL) {
 		// No display.
 		return;
@@ -186,69 +203,106 @@ static void engine_draw_frame(struct engine* engine) {
 	// Record start time
 	std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
 
-	//LOGD("Roll: %f, Pitch: %f", window.x_mouse, window.y_mouse);
-	//window.x_mouse = engine->state.x;
-	//window.y_mouse = engine->state.y;
-	//LOGD("X: %f, Y: %f", window.x_mouse, window.y_mouse);
-
 	// VtoK Update and Draw
 	//device.Update(0);
 
 	// Get most recent CODEC results
 
 	// Set a new input frame
-	int bufidx = AMediaCodec_dequeueInputBuffer(engine->codec, 200000);
-	LOGI("input buffer %d", bufidx);
-	size_t bufsize;
-	auto buf = AMediaCodec_getInputBuffer(engine->codec, bufidx, &bufsize);
-	auto sampleSize = AMediaExtractor_readSampleData(engine->ex, buf, bufsize);
-	auto presentationTimeUs = AMediaExtractor_getSampleTime(engine->ex);
-
-	AMediaCodec_queueInputBuffer(engine->codec, bufidx, 0, sampleSize, presentationTimeUs, 0);
-	bool ret = AMediaExtractor_advance(engine->ex);
-	LOGI("Sample Size %u", buf);
-
-	AMediaCodecBufferInfo info;
-	bufidx = AMediaCodec_dequeueOutputBuffer(engine->codec, &info, 200000);
-	if (bufidx >= 0)
+	int bufidx = -1;
+	if (!engine->decoder.sawInputEOS)
 	{
-		LOGI("output buffer %d", bufidx);
-		uint8_t *buffer = AMediaCodec_getOutputBuffer(engine->codec, bufidx, &bufsize);
-		LOGD("Bytes: %u", buffer[0]);
-		AMediaCodec_releaseOutputBuffer(engine->codec, bufidx, false);
-	}
-	else if (bufidx == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
-		LOGD("output buffers changed");
-	}
-	else if (bufidx == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
-		auto format = AMediaCodec_getOutputFormat(engine->codec);
-		LOGD("format changed to: %s", AMediaFormat_toString(format));
-		AMediaFormat_delete(format);
-	}
-	else if (bufidx == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
-		LOGD("no output buffer right now");
-	}
-	else {
-		LOGD("unexpected info code: %zd", bufidx);
+		size_t bufsize;
+
+		// Retrieve an available input buffer
+		bufidx = AMediaCodec_dequeueInputBuffer(engine->decoder.codec, 2000);
+		LOGI("Input buffer idx:  %d", bufidx);
+		if (bufidx >= 0)
+		{
+			auto buf = AMediaCodec_getInputBuffer(engine->decoder.codec, bufidx, &bufsize);
+			LOGD("Input buffer size: %i", bufsize);
+			auto sampleSize = AMediaExtractor_readSampleData(engine->app->media_extract, buf, bufsize);
+			LOGD("Input sample size: %i", sampleSize);
+			if (sampleSize < 0)
+			{
+				sampleSize = 0;
+				engine->decoder.sawInputEOS = true;
+				LOGD("Decoder: input EOS");
+			}
+			auto presentationTimeUs = AMediaExtractor_getSampleTime(engine->decoder.ex);
+
+			AMediaCodec_queueInputBuffer(
+				engine->decoder.codec,
+				bufidx, 0, sampleSize, presentationTimeUs,
+				engine->decoder.sawInputEOS ? AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM : 0);
+			AMediaExtractor_advance(engine->decoder.ex);
+		}
 	}
 
+	// Fill output buffer (maybe)
+	if (!engine->decoder.sawOutputEOS)
+	{
+		AMediaCodecBufferInfo info;
+		auto status = AMediaCodec_dequeueOutputBuffer(engine->decoder.codec, &info, 0);
+		if (status >= 0)
+		{
+			if (info.flags & AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM)
+			{
+				LOGI("Decoder: output EOS");
+				engine->decoder.sawOutputEOS = true;
+			}
+			int64_t presentationNano = info.presentationTimeUs * 1000;
+			if (engine->decoder.renderstart < 0)
+			{
+				engine->decoder.renderstart = systemnanotime() - presentationNano;
+			}
+			int64_t delay = (engine->decoder.renderstart + presentationNano) - systemnanotime();
+			if (delay > 0)
+			{
+				usleep(delay / 1000);
+			}
+			AMediaCodec_releaseOutputBuffer(engine->decoder.codec, status, info.size != 0);
+			if (engine->decoder.render_once)
+			{
+				engine->decoder.render_once = false;
+				return;
+			}
+		}
+		else if (status == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED)
+		{
+			LOGI("output buffers changed");
+		}
+		else if (status == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED)
+		{
+			auto format = AMediaCodec_getOutputFormat(engine->decoder.codec);
+			LOGI("format changed to: %s", AMediaFormat_toString(format));
+			AMediaFormat_delete(format);
+		}
+		else if (status == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
+			LOGI("no output buffer right now");
+		}
+		else {
+			LOGI("unexpected info code: %zd", status);
+		}
+	}
+
+	// DISPLAY
 
 	// Swap buffers
-	eglSwapBuffers(engine->display, engine->surface);
+	//eglSwapBuffers(engine->display, engine->surface);
 
 	// Record End time
 	std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
 
 	// Report performance
 	long duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-//	LOGD("Elapsed time: %d us", duration);
+	//LOGD("Elapsed time: %d us", duration);
 
 }
 
-
 /*
  * Tear down the EGL context currently associated with the display.
-*/
+ */
 static void engine_term_display(struct engine* engine) {
 	if (engine->display != EGL_NO_DISPLAY) {
 		eglMakeCurrent(engine->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
@@ -340,10 +394,12 @@ void android_main(struct android_app* state)
 
 	// Get external storage path (using JNI)
 	std::string base_path = std::string(state->activity->externalDataPath);
-	
-	// Start Scuva Log
+	LOGI("base path: %s", base_path.c_str());
+
+	// Start Log
 	Log::Initialize(base_path);
 
+	// Initialize app state
 	struct engine engine;
 	memset(&engine, 0, sizeof(engine));
 	state->userData = &engine;
@@ -353,19 +409,17 @@ void android_main(struct android_app* state)
 
 	// Prepare to monitor accelerometer
 	engine.sensorManager = ASensorManager_getInstance();
-	engine.accelerometerSensor = ASensorManager_getDefaultSensor(engine.sensorManager,
-		ASENSOR_TYPE_ACCELEROMETER);
-	engine.sensorEventQueue = ASensorManager_createEventQueue(engine.sensorManager,
-		state->looper, LOOPER_ID_USER, NULL, NULL);
-
-	if (state->savedState != NULL) {
+	engine.accelerometerSensor = ASensorManager_getDefaultSensor(engine.sensorManager, ASENSOR_TYPE_ACCELEROMETER);
+	engine.sensorEventQueue = ASensorManager_createEventQueue(engine.sensorManager, state->looper, LOOPER_ID_USER, NULL, NULL);
+	if (state->savedState != NULL) 
+	{
 		// We are starting with a previous saved state; restore from it.
 		engine.state = *(struct saved_state*)state->savedState;
 	}
-
 	engine.animating = 1;
 
-	while (1) {
+	while (1)
+	{
 		// Read all pending events.
 		int ident;
 		int events;

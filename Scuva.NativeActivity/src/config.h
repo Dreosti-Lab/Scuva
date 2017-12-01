@@ -13,7 +13,7 @@
 
 // Declare Constants
 // -----------------
-const std::string BASE_PATH = "/mnt/sdcard/Scuva/files";
+const std::string MOVIE_PATH = "/mnt/sdcard/Scuva";
 #define LOG_PATH "/_scuva_log.txt"
 
 // Define Server/Client Addresses
