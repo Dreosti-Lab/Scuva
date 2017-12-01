@@ -39,6 +39,7 @@ struct decoder
 	bool isPlaying;
 	bool render_once;
 	int64_t renderstart;
+	float speed;
 };
 
 struct engine
@@ -59,14 +60,8 @@ struct engine
 	struct saved_state state;
 };
 
-
-
-// Graphics
-//vkWindow window;
-//VtoK device;
-
 /*
- * Initialize an EGL context for the current display.
+ * Initialize an EGL context for the current display and Decoder
  */
 static int engine_init_display(struct engine* engine) 
 {
@@ -90,6 +85,7 @@ static int engine_init_display(struct engine* engine)
 	engine->decoder.sawOutputEOS = false;
 	engine->decoder.isPlaying = false;
 	engine->decoder.render_once = true;
+	engine->decoder.speed = 1.0f;
 
 	// Start Media Codec
 	AMediaCodec_start(engine->decoder.codec);
@@ -132,7 +128,7 @@ static int engine_init_display(struct engine* engine)
 	* ANativeWindow buffers to match, using EGL_NATIVE_VISUAL_ID. */
 	eglGetConfigAttrib(display, config, EGL_NATIVE_VISUAL_ID, &format);
 
-	ANativeWindow_setBuffersGeometry(engine->app->window, 0, 0, format);
+	//ANativeWindow_setBuffersGeometry(engine->app->window, 0, 0, format);
 
 	surface = eglCreateWindowSurface(display, config, engine->app->window, NULL);
 
@@ -161,22 +157,6 @@ static int engine_init_display(struct engine* engine)
 	engine->state.angle = 0;
 
 	LOGD("Debuggery: Starting...");
-
-	/*
-	// VtoK Initialize
-	window.width = w;
-	window.height = h;
-	window.fullscreen = false;
-	window.winptr = surface;
-	window.touch = false;
-	window.x_pos = 0.f;
-	window.y_pos = 0.f;
-	window.x_vel = 0.f;
-	window.y_vel = 0.f;
-
-	vkLog::Initialize();
-	device.Initialize(&window, SPACE_PATH_);
-	*/
 	return 0;
 }
 
@@ -203,11 +183,7 @@ static void engine_draw_frame(struct engine* engine)
 	// Record start time
 	std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
 
-	// VtoK Update and Draw
-	//device.Update(0);
-
 	// Get most recent CODEC results
-
 	// Set a new input frame
 	int bufidx = -1;
 	if (!engine->decoder.sawInputEOS)
@@ -216,13 +192,13 @@ static void engine_draw_frame(struct engine* engine)
 
 		// Retrieve an available input buffer
 		bufidx = AMediaCodec_dequeueInputBuffer(engine->decoder.codec, 2000);
-		LOGI("Input buffer idx:  %d", bufidx);
+		//LOGI("Input buffer idx:  %d", bufidx);
 		if (bufidx >= 0)
 		{
 			auto buf = AMediaCodec_getInputBuffer(engine->decoder.codec, bufidx, &bufsize);
-			LOGD("Input buffer size: %i", bufsize);
+			//LOGD("Input buffer size: %i", bufsize);
 			auto sampleSize = AMediaExtractor_readSampleData(engine->app->media_extract, buf, bufsize);
-			LOGD("Input sample size: %i", sampleSize);
+			//LOGD("Input sample size: %i", sampleSize);
 			if (sampleSize < 0)
 			{
 				sampleSize = 0;
@@ -251,7 +227,7 @@ static void engine_draw_frame(struct engine* engine)
 				LOGI("Decoder: output EOS");
 				engine->decoder.sawOutputEOS = true;
 			}
-			int64_t presentationNano = info.presentationTimeUs * 1000;
+			int64_t presentationNano = (int64_t)((float)info.presentationTimeUs * 1000.f * engine->decoder.speed);
 			if (engine->decoder.renderstart < 0)
 			{
 				engine->decoder.renderstart = systemnanotime() - presentationNano;
@@ -279,7 +255,7 @@ static void engine_draw_frame(struct engine* engine)
 			AMediaFormat_delete(format);
 		}
 		else if (status == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
-			LOGI("no output buffer right now");
+			//LOGI("no output buffer right now");
 		}
 		else {
 			LOGI("unexpected info code: %zd", status);
@@ -442,9 +418,11 @@ void android_main(struct android_app* state)
 					ASensorEvent event;
 					while (ASensorEventQueue_getEvents(engine.sensorEventQueue, &event, 1) > 0) 
 					{
-						//LOGI("accelerometer: x=%f y=%f z=%f",event.acceleration.x, event.acceleration.y,event.acceleration.z);
-						//window.x_mouse = event.acceleration.roll/50.0f;
-						//window.y_mouse = event.acceleration.pitch/50.0f;
+						float rate = event.acceleration.roll / 10.0f;
+						if (rate < 0.0f) { rate *= -1.f; }
+						if (rate < 0.1f) { rate = 0.1f; }
+						engine.decoder.speed = rate + 0.5f;
+						LOGI("accelerometer: rate=%f", rate);
 					}
 				} 
 			}
